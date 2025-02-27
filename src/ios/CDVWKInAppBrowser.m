@@ -53,6 +53,11 @@ static CDVWKInAppBrowser* instance = nil;
     _waitForBeforeload = NO;
 }
 
+- (id)settingForKey:(NSString*)key
+{
+    return [self.commandDelegate.settings objectForKey:[key lowercaseString]];
+}
+
 - (void)onReset
 {
     [self close:nil];
@@ -485,6 +490,17 @@ static CDVWKInAppBrowser* instance = nil;
         [pluginResult setKeepCallback:[NSNumber numberWithBool:YES]];
         [self.commandDelegate sendPluginResult:pluginResult callbackId:self.callbackId];
     }
+    // custome scheme
+    //test for whitelisted custom scheme names like mycoolapp:// or twitteroauthresponse:// (Twitter Oauth Response)
+    else if (![[ url scheme] isEqualToString:@"http"] && ![[ url scheme] isEqualToString:@"https"] && [self isAllowedScheme:[url scheme]]) {
+            // Send a customscheme event.
+            CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK
+                                                          messageAsDictionary:@{@"type":@"customscheme", @"url":[url absoluteString]}];
+            [pluginResult setKeepCallback:[NSNumber numberWithBool:YES]];
+            [self.commandDelegate sendPluginResult:pluginResult callbackId:self.callbackId];
+            decisionHandler(WKNavigationActionPolicyCancel);
+            return;
+    }
     
     //if is an app store, tel, sms, mailto or geo link, let the system handle it, otherwise it fails to load it
     NSArray * allowedSchemes = @[@"itms-appss", @"itms-apps", @"tel", @"sms", @"mailto", @"geo"];
@@ -518,6 +534,21 @@ static CDVWKInAppBrowser* instance = nil;
     }else{
         decisionHandler(WKNavigationActionPolicyCancel);
     }
+}
+
+- (BOOL)isAllowedScheme:(NSString*)scheme
+{
+    NSString* allowedSchemesPreference = [self settingForKey:@"AllowedSchemes"];
+    if (allowedSchemesPreference == nil || [allowedSchemesPreference isEqualToString:@""]) {
+        // Preference missing.
+        return NO;
+    }
+    for (NSString* allowedScheme in [allowedSchemesPreference componentsSeparatedByString:@","]) {
+        if ([allowedScheme isEqualToString:scheme]) {
+            return YES;
+        }
+    }
+    return NO;
 }
 
 #pragma mark WKScriptMessageHandler delegate
